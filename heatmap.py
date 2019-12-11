@@ -4,7 +4,8 @@
 import glob
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib.ticker
+import scipy.ndimage
+#import matplotlib.ticker
 import pandas as pd
 import os
 
@@ -28,7 +29,7 @@ class Heatmap:
             self.lat_bins = lat_bins
         return
     
-    def make_map(self):
+    def make_map(self, blur_sigma=0.5):
         """ 
         Make a heatmap i.e. a pcolormesh 
         """
@@ -37,7 +38,11 @@ class Heatmap:
                                 ' the make_heatmap_hist() or '
                                 'load_heatmap() methods.')
         _, self.ax = plt.subplots(figsize=(6,6))
-        p = self.ax.pcolormesh(self.heatmap.columns, self.heatmap.index, self.heatmap.T, 
+        if blur_sigma:
+            heatmap = scipy.ndimage.gaussian_filter(self.heatmap, blur_sigma)
+        else:
+            heatmap = self.heatmap
+        p = self.ax.pcolormesh(self.heatmap.columns, self.heatmap.index, heatmap.T, 
                             cmap='hot', shading='gouraud', vmax=200)
 
         self.ax.xaxis.set_visible(False)
