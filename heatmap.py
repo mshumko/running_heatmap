@@ -13,14 +13,14 @@ import gpxpy.gpx
 class Heatmap:
     def __init__(self, lat_bins=None, lon_bins=None, box_width=0.1):
         """ 
-        Initialize the heatmap class and its parameters. 
+        Initialize the heatmap class and the latitude and longitude bins. 
         """
         if (lat_bins is None) or (lon_bins is None):
             center = [-111.0429, 45.660]
             self.lon_bins = np.linspace(center[0]-box_width/2, center[0]+box_width/2,
-                                        num=500)
+                                        num=100)
             self.lat_bins = np.linspace(center[1]-box_width/2, center[1]+box_width/2, 
-                                        num=500)
+                                        num=100)
         else:
             self.lon_bins = lon_bins
             self.lat_bins = lat_bins
