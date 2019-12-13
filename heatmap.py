@@ -19,11 +19,11 @@ import gpxpy.gpx
 # import cartopy_tile_map
 
 class Heatmap:
-    def __init__(self, lat_bins=None, lon_bins=None, box_width=0.4):
+    def __init__(self, lat_bins=None, lon_bins=None, box_width=0.4, grid_res=500):
         """ 
         Initialize the heatmap class and the latitude and longitude bins. 
         """
-        self.grid_res = 200
+        self.grid_res = grid_res
         if (lat_bins is None) or (lon_bins is None):
             self.center = [-111.0329, 45.660]
             self.lon_bins = np.linspace(self.center[0]-box_width/2, self.center[0]+box_width/2,
@@ -35,8 +35,8 @@ class Heatmap:
             self.lat_bins = lat_bins
         return
     
-    def make_map(self, blur_sigma=0.5, map_zoom_start=12, heatmap_radius=10,
-                    heatmap_blur=5, heatmap_min_opacity=0.5,
+    def make_map(self, blur_sigma=0.5, map_zoom_start=13, heatmap_radius=15,
+                    heatmap_blur=5, heatmap_min_opacity=0.2,
                     heatmap_max_zoom=18):
         """ 
         Make a heatmap html file using folium
@@ -46,15 +46,16 @@ class Heatmap:
                                 ' the make_heatmap_hist() or '
                                 'load_heatmap() methods.')
 
-        if blur_sigma:
-            heatmap = scipy.ndimage.gaussian_filter(self.heatmap, blur_sigma)
+        # if blur_sigma:
+        #     heatmap = scipy.ndimage.gaussian_filter(self.heatmap, blur_sigma)
 
         self.m = folium.Map(location=self.center[::-1],
                        zoom_start=map_zoom_start,
-                       tiles='Stamen Terrain')
+                       tiles='Stamen Terrain', max_zoom=heatmap_max_zoom)
         # Generate heat map
         latlat, lonlon = np.meshgrid(self.heatmap.index, self.heatmap.columns.astype(float))
-        data = np.stack([latlat.flatten(), lonlon.flatten(), self.heatmap.values.flatten()], axis=-1)
+        idx = np.where(self.heatmap.values)
+        data = np.stack([latlat[idx].flatten(), lonlon[idx].flatten(), self.heatmap.values[idx].flatten()], axis=-1)
 
         heatmap = folium.plugins.HeatMap(data,
                          max_val=self.heatmap.values.max(),
@@ -120,6 +121,15 @@ class Heatmap:
         """
         self.heatmap.to_csv(save_path)
         return
+
+
+def secrets(self, p, center, radius):
+    """ 
+    This function randomly pulls a fraction p of the points from a secret 
+    location given by a circle with a given center and radius
+    """
+
+    return
 
 if __name__ == '__main__':
     h = Heatmap()
