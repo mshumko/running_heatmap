@@ -35,9 +35,9 @@ class Heatmap:
             self.lat_bins = lat_bins
         return
     
-    def make_map(self, blur_sigma=0.5, map_zoom_start=13, heatmap_radius=15,
-                    heatmap_blur=5, heatmap_min_opacity=0.2,
-                    heatmap_max_zoom=18):
+    def make_map(self, blur_sigma=0.5, map_zoom_start=11, heatmap_radius=15,
+                    heatmap_blur=15, heatmap_min_opacity=0.5,
+                    heatmap_max_zoom=14):
         """ 
         Make a heatmap html file using folium
         """
