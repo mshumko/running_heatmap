@@ -129,6 +129,7 @@ def secrets(self, p, center, radius):
     location given by a circle with a given center and radius
     """
 
+    raise NotImplementedError
     return
 
 if __name__ == '__main__':
