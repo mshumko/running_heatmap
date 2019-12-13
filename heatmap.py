@@ -5,12 +5,18 @@ import glob
 import numpy as np
 import matplotlib.pyplot as plt
 import scipy.ndimage
-#import matplotlib.ticker
 import pandas as pd
 import os
 
+import folium
+import folium.plugins
+
+# import cartopy.crs as ccrs
+# import cartopy.io.img_tiles as cimgt
 import gpxpy
 import gpxpy.gpx
+
+# import cartopy_tile_map
 
 class Heatmap:
     def __init__(self, lat_bins=None, lon_bins=None, box_width=0.4):
@@ -19,35 +25,45 @@ class Heatmap:
         """
         self.grid_res = 200
         if (lat_bins is None) or (lon_bins is None):
-            center = [-111.0329, 45.660]
-            self.lon_bins = np.linspace(center[0]-box_width/2, center[0]+box_width/2,
+            self.center = [-111.0329, 45.660]
+            self.lon_bins = np.linspace(self.center[0]-box_width/2, self.center[0]+box_width/2,
                                         num=self.grid_res)
-            self.lat_bins = np.linspace(center[1]-box_width/2, center[1]+box_width/2, 
+            self.lat_bins = np.linspace(self.center[1]-box_width/2, self.center[1]+box_width/2, 
                                         num=self.grid_res)
         else:
             self.lon_bins = lon_bins
             self.lat_bins = lat_bins
         return
     
-    def make_map(self, blur_sigma=0.5):
+    def make_map(self, blur_sigma=0.5, map_zoom_start=12, heatmap_radius=10,
+                    heatmap_blur=5, heatmap_min_opacity=0.5,
+                    heatmap_max_zoom=18):
         """ 
-        Make a heatmap i.e. a pcolormesh 
+        Make a heatmap html file using folium
         """
         if not hasattr(self, 'heatmap'):
             raise AttributeError('self.heatmap not found. Either run'
                                 ' the make_heatmap_hist() or '
                                 'load_heatmap() methods.')
-        _, self.ax = plt.subplots(figsize=(6,6))
+
         if blur_sigma:
             heatmap = scipy.ndimage.gaussian_filter(self.heatmap, blur_sigma)
-        else:
-            heatmap = self.heatmap
-        p = self.ax.pcolormesh(self.heatmap.columns, self.heatmap.index, heatmap.T, 
-                            cmap='hot', shading='gouraud', vmax=200)
 
-        self.ax.xaxis.set_visible(False)
-        self.ax.yaxis.set_visible(False)
-        plt.show()
+        self.m = folium.Map(location=self.center[::-1],
+                       zoom_start=map_zoom_start,
+                       tiles='Stamen Terrain')
+        # Generate heat map
+        latlat, lonlon = np.meshgrid(self.heatmap.index, self.heatmap.columns.astype(float))
+        data = np.stack([latlat.flatten(), lonlon.flatten(), self.heatmap.values.flatten()], axis=-1)
+
+        heatmap = folium.plugins.HeatMap(data,
+                         max_val=self.heatmap.values.max(),
+                          min_opacity=heatmap_min_opacity,
+                          radius=heatmap_radius,
+                          blur=heatmap_blur,
+                          max_zoom=heatmap_max_zoom)
+        self.m.add_child(heatmap)
+        self.m.save('heatmap.html')
         return
 
     def make_heatmap_hist(self, gpx_path='./data/', save_heatmap=True):
@@ -104,7 +120,6 @@ class Heatmap:
         """
         self.heatmap.to_csv(save_path)
         return
-
 
 if __name__ == '__main__':
     h = Heatmap()
