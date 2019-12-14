@@ -2,7 +2,8 @@
 If you are curious on how to implement Strava's simple, yet rich [heatmap](www.strava.com/heatmap), this repository will help you get started. I show a straight-forward implementation of a heatmap using your own running tracks in gpx format which is inspired by ```geo-heatmap```. 
 
 An example showing various running routes around Bozeman, Montana (the output html code is interactive)
-![Bozeman area heatmap](https://github.com/mshumko/running_heatmap/blob/master/images/heatmap_1.jpg)
+<img src="https://github.com/mshumko/running_heatmap/blob/master/images/heatmap.png" alt="drawing" width="100%"/>
+<!-- ![Bozeman area heatmap](https://github.com/mshumko/running_heatmap/blob/master/images/heatmap.png =250x) -->
 
 
 ## Steps to make your own heatmap

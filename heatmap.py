@@ -1,6 +1,3 @@
-# This program makes a heatmap (plt.pcolormesh)
-# of a bounded lat/lon area.
-
 import glob
 import numpy as np
 import matplotlib.pyplot as plt
@@ -14,32 +11,52 @@ import gpxpy
 import gpxpy.gpx
 
 class Heatmap:
-    def __init__(self, lat_bins=None, lon_bins=None, center=None, box_width=0.4, grid_res=500):
+    def __init__(self, lat_bins=None, lon_bins=None, center=None, box_width=2, grid_res=0.001):
         """
         Initialize the heatmap class and the latitude and longitude bins. 
 
         Parameters
         ----------
         lat_bins : float array, optional
-            Latitude histogram bins.
+            Latitude histogram bins. Becomes class attribute.
         lon_bins : float array, optional
-            Longitude histogram bins.
+            Longitude histogram bins. Becomes class attribute.
+        center : float list of len(2), optional
+            The center of the map in the [lon, lat] format with
+            negative West longitudes.
         box_width : float
-            The size of the his
+            The size of the lat/lon box centered on center if 
+            lat_bins or lon_bins are not specified.
+        grid_res : float
+            The resolution of the grid in degrees. Useful if the
+            lat_bins or lon_bins kwargs are not specified.
+
+        Example
+        -------
+        h = Heatmap(center=[-111.0329, 45.660])
+        # Instead of running make_heatmap_hist() you can run 
+        # h.load_heatmap() to load an existing ./data/heatmap.csv
+        # file. 
+        h.make_heatmap_hist() 
+        h.make_map()
 
         Returns
         -------
-        bool
-            True if successful, False otherwise.      
+        None     
         """
         self.grid_res = grid_res
         if (lat_bins is None) or (lon_bins is None):
             # If the user did not specify lat/lon bins assume were in Bozeman.
             self.center = [-111.0329, 45.660]
-            self.lon_bins = np.linspace(self.center[0]-box_width/2, self.center[0]+box_width/2,
-                                        num=self.grid_res)
-            self.lat_bins = np.linspace(self.center[1]-box_width/2, self.center[1]+box_width/2, 
-                                        num=self.grid_res)
+            # self.lon_bins = np.linspace(self.center[0]-box_width/2, self.center[0]+box_width/2,
+            #                             num=self.grid_res)
+            # self.lat_bins = np.linspace(self.center[1]-box_width/2, self.center[1]+box_width/2, 
+            #                             num=self.grid_res)
+
+            self.lon_bins = np.arange(self.center[0]-box_width/2, self.center[0]+box_width/2,
+                                        grid_res)
+            self.lat_bins = np.arange(self.center[1]-box_width/2, self.center[1]+box_width/2, 
+                                        grid_res)
         else:
             self.lon_bins = lon_bins
             self.lat_bins = lat_bins
@@ -50,13 +67,32 @@ class Heatmap:
             print('Made empty data directory.')
         return
 
-    def make_heatmap_hist(self, gpx_path='./data/', save_heatmap=True, verbose=False):
+    def make_heatmap_hist(self, gpx_path='./data/', save_heatmap=True, verbose=False, gpx_regex='*gpx'):
         """
-        Loop over all the days, and take each track and 
-        histrogram2d it.
+        Makes a 2d lat-lon histogram using the gpx tracks in ./data. The gpx_regex kwarg allows you to
+        change the glob regular expression to match specific gpx files.
+
+        Parameters
+        ----------
+        gpx_path : str, optional
+            Path to gpx tracks, defaults to ./data/.
+        save_heatmap : bool, optional
+            Save the 2d histogram - wrapped in a Pandas DataFrame - to a file ./data/heatmap.csv
+        verbose : bool, optional
+            If true, will print gpx files that could not be processed, typically are treadmill 
+            runs. This is useful for debugging if the heatmap is not generated.
+        gpx_regex : str, optional
+            A regular expression string that gets passed to glob.glob(). By default it will match all
+            .gpx files.
+
+        Returns
+        -------
+        self.heatmap : a Pandas DataFrame object containing the 2d histogram
+            with the latitude bins in the index and longitude bins in the
+            columns
         """
         # Get the names of gpx files in the ./data/ folder.
-        self._get_gpx_files(gpx_path)
+        self._get_gpx_files(gpx_path, gpx_regex=gpx_regex)
 
         # 2d heatmap histrogram.
         heatmap = np.zeros((len(self.lon_bins)-1, len(self.lat_bins)-1))
@@ -88,20 +124,40 @@ class Heatmap:
                                     index=self.lat_bins[:-1], 
                                     columns=self.lon_bins[:-1])
         if save_heatmap: self._save_heatmap()
-        return
+        return self.heatmap
     
-    def make_map(self, blur_sigma=0.5, map_zoom_start=11, heatmap_radius=15,
-                    heatmap_blur=15, heatmap_min_opacity=0.5,
-                    heatmap_max_zoom=14):
+    def make_map(self, map_zoom_start=11, heatmap_max_zoom=14, heatmap_radius=15, 
+                heatmap_blur=15, heatmap_min_opacity=0.5):
         """ 
         Make a heatmap html file using folium
+
+        Parameters
+        ----------
+        map_zoom_start : int, optional
+            Passed into folium.plugins.HeatMap and folium.Map. Sets the start
+            zoom level, the larger values will make a more zoomed-in map.
+        heatmap_max_zoom
+            Passed into folium.plugins.HeatMap and folium.Map to set the max zoom
+            level.
+        heatmap_radius : int, optional 
+            Passed into folium.plugins.HeatMap to determine how large the heatmap
+            blobs are.
+        heatmap_blur : float, optional
+            Passed into folium.plugins.HeatMap and sets the amount of bluring.
+        heatmap_min_opacity : float, optional
+            Passed into folium.plugins.HeatMap and sets the minimum opacity of the
+            heatmap.
+
+        Returns
+        -------
+        self.map : a folium map object with the heatmap layer.
         """
         if not hasattr(self, 'heatmap'):
             raise AttributeError('self.heatmap not found. Either run'
                                 ' the make_heatmap_hist() or '
                                 'load_heatmap() methods.')
         # Make a terrain map.
-        self.m = folium.Map(location=self.center[::-1],
+        self.map = folium.Map(location=self.center[::-1],
                        zoom_start=map_zoom_start,
                        tiles='Stamen Terrain', max_zoom=heatmap_max_zoom)
 
@@ -125,29 +181,62 @@ class Heatmap:
                           radius=heatmap_radius,
                           blur=heatmap_blur,
                           max_zoom=heatmap_max_zoom)
-        self.m.add_child(heatmap)
-        self.m.save('./data/heatmap.html')
-        return            
+        self.map.add_child(heatmap)
+        self.map.save('./data/heatmap.html')
+        return self.map    
 
     def load_heatmap(self, heatmap_path='./data/heatmap.csv'):
-        """ Loads the heatmap file into a Pandas dataframe """
+        """ 
+        Load the heatmap file into a Pandas DataFrame.
+
+        Parameters
+        ----------
+        heatmap_path : str, optional
+            The relative path to the heatmap.csv file.
+
+        Returns
+        -------
+        None, creates self.heatmap attribute.
+        """
         self.heatmap = pd.read_csv(heatmap_path, index_col=0)
         return
 
 
-    def _get_gpx_files(self, gpx_path):
+    def _get_gpx_files(self, gpx_path, gpx_regex='.gpx'):
         """
         Get a list of paths to all gpx files.
+
+        Parameters
+        ----------
+        gpx_path: str
+            The path to the gpx data.
+            
+        gpx_regex : str, optional
+            The regular expression for glob.glob(). Can be useful for 
+            filtering activity types.
+
+        Returns
+        -------
+        None, creates self.gpx_files attribute.
         """
         self.gpx_files = glob.glob(
-            os.path.join(gpx_path, '*Running*gpx')
+            os.path.join(gpx_path, regex)
             )
         return
     
     def _save_heatmap(self, save_path='./data/heatmap.csv'):
         """
         Saves the heatmap to a csv file with the latitude bins saved as the 
-        index and longitude bins saved as the columns
+        index and longitude bins saved as the columns.
+
+        Parameters
+        ----------
+        save_path: str, optional
+            The path where to save the heatmap.csv file.
+
+        Returns
+        -------
+        None
         """
         self.heatmap.to_csv(save_path)
         return
