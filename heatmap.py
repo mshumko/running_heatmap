@@ -29,6 +29,10 @@ class Heatmap:
         else:
             self.lon_bins = lon_bins
             self.lat_bins = lat_bins
+
+        if not os.path.exists('./data/'):
+            os.makedirs('./data/')
+            print('Made empty data directory.')
         return
     
     def make_map(self, blur_sigma=0.5, map_zoom_start=11, heatmap_radius=15,
@@ -67,7 +71,7 @@ class Heatmap:
                           blur=heatmap_blur,
                           max_zoom=heatmap_max_zoom)
         self.m.add_child(heatmap)
-        self.m.save('heatmap.html')
+        self.m.save('./data/heatmap.html')
         return
 
     def make_heatmap_hist(self, gpx_path='./data/', save_heatmap=True, verbose=False):
@@ -135,6 +139,6 @@ class Heatmap:
 
 if __name__ == '__main__':
     h = Heatmap()
-    #h.make_heatmap_hist()
+    h.make_heatmap_hist()
     h.load_heatmap()
     h.make_map()
