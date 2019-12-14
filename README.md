@@ -17,7 +17,7 @@ An example showing various running routes around Bozeman, Montana (the output ht
  - Initialize the ```Heatmap``` object with the ```center``` kwarg that specifies the map center, well as the ```lat_bins``` and ```lon_bins``` that define the 2d "heat" histogram. If you don't specify these parameters the program assumes you live in Bozeman.
  - Histrogram all of the gpx track files in ```./data/``` using the ```make_heatmap_hist()``` method. Optionally you can set the ```save_heatmap``` (true by default) kwarg to save the data to avoid the time consuming gpx track every time. 
  - Use the 2d histogram and folium to make a heatmap with the ```make_map()``` method. You will generate a ```heatmap.html``` file in the data directory.
- - Drag the html file into a browser and enjoy! These are many useful kwargs to pass to the ```make_map()``` method to customise the heatmap to your liking.
+ - Drag the html file into a browser to explore the map. These are many useful kwargs to pass to the ```make_map()``` method to customise the heatmap to your liking.
 
 Example:
 ```python
