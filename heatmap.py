@@ -67,10 +67,10 @@ class Heatmap:
             print('Made empty data directory.')
         return
 
-    def make_heatmap_hist(self, gpx_path='./data/', save_heatmap=True, verbose=False, gpx_regex='*gpx'):
+    def make_heatmap_hist(self, gpx_path='./data/', save_heatmap=True, verbose=False, gpx_pattern='*gpx'):
         """
-        Makes a 2d lat-lon histogram using the gpx tracks in ./data. The gpx_regex kwarg allows you to
-        change the glob regular expression to match specific gpx files.
+        Makes a 2d lat-lon histogram using the gpx tracks in ./data. The gpx_pattern kwarg allows you to
+        change the glob pattern e.g. wildcard (*) to match specific gpx files.
 
         Parameters
         ----------
@@ -81,8 +81,8 @@ class Heatmap:
         verbose : bool, optional
             If true, will print gpx files that could not be processed, typically are treadmill 
             runs. This is useful for debugging if the heatmap is not generated.
-        gpx_regex : str, optional
-            A regular expression string that gets passed to glob.glob(). By default it will match all
+        gpx_pattern : str, optional
+            A pattern string that gets passed to glob.glob(). By default it will match all
             .gpx files.
 
         Returns
@@ -92,7 +92,7 @@ class Heatmap:
             columns
         """
         # Get the names of gpx files in the ./data/ folder.
-        self._get_gpx_files(gpx_path, gpx_regex=gpx_regex)
+        self._get_gpx_files(gpx_path, gpx_pattern=gpx_pattern)
 
         # 2d heatmap histrogram.
         heatmap = np.zeros((len(self.lon_bins)-1, len(self.lat_bins)-1))
@@ -126,7 +126,7 @@ class Heatmap:
         if save_heatmap: self._save_heatmap()
         return self.heatmap
     
-    def make_map(self, map_zoom_start=11, heatmap_max_zoom=14, heatmap_radius=15, 
+    def make_map(self, map_zoom_start=11, heatmap_max_zoom=13, heatmap_radius=15, 
                 heatmap_blur=15, heatmap_min_opacity=0.5):
         """ 
         Make a heatmap html file using folium
@@ -202,7 +202,7 @@ class Heatmap:
         return
 
 
-    def _get_gpx_files(self, gpx_path, gpx_regex='.gpx'):
+    def _get_gpx_files(self, gpx_path, gpx_pattern='.gpx'):
         """
         Get a list of paths to all gpx files.
 
@@ -211,8 +211,8 @@ class Heatmap:
         gpx_path: str
             The path to the gpx data.
             
-        gpx_regex : str, optional
-            The regular expression for glob.glob(). Can be useful for 
+        gpx_pattern : str, optional
+            The patten for glob.glob(). Can be useful for 
             filtering activity types.
 
         Returns
@@ -220,7 +220,7 @@ class Heatmap:
         None, creates self.gpx_files attribute.
         """
         self.gpx_files = glob.glob(
-            os.path.join(gpx_path, regex)
+            os.path.join(gpx_path, gpx_pattern)
             )
         return
     
