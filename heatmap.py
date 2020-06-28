@@ -1,9 +1,8 @@
-import glob
 import numpy as np
 import matplotlib.pyplot as plt
-import scipy.ndimage
+import scipy.sparse # To make a sparse lat/lon matrix
 import pandas as pd
-import os
+import pathlib
 
 import folium
 import folium.plugins
@@ -62,8 +61,8 @@ class Heatmap:
             self.lat_bins = lat_bins
             self.center = center
 
-        if not os.path.exists('./data/'):
-            os.makedirs('./data/')
+        if not pathlib.Path('./data/').exists():
+            pathlib.Path('./data/').mkdir()
             print('Made empty data directory.')
         return
 
@@ -92,7 +91,7 @@ class Heatmap:
             columns
         """
         # Get the names of gpx files in the ./data/ folder.
-        self._get_gpx_files(gpx_path, gpx_pattern=gpx_pattern)
+        self._get_gpx_files(gpx_path, gpx_pattern)
 
         # 2d heatmap histrogram.
         heatmap = np.zeros((len(self.lon_bins)-1, len(self.lat_bins)-1))
@@ -201,8 +200,7 @@ class Heatmap:
         self.heatmap = pd.read_csv(heatmap_path, index_col=0)
         return
 
-
-    def _get_gpx_files(self, gpx_path, gpx_pattern='.gpx'):
+    def _get_gpx_files(self, gpx_path, gpx_pattern):
         """
         Get a list of paths to all gpx files.
 
@@ -219,9 +217,8 @@ class Heatmap:
         -------
         None, creates self.gpx_files attribute.
         """
-        self.gpx_files = glob.glob(
-            os.path.join(gpx_path, gpx_pattern)
-            )
+        self.gpx_files = list(pathlib.Path(gpx_path).glob(gpx_pattern))
+        print(f'{__file__}: Found {len(self.gpx_files)} gpx files')
         return
     
     def _save_heatmap(self, save_path='./data/heatmap.csv'):
