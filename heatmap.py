@@ -12,7 +12,7 @@ import gpxpy.gpx
 
 class Heatmap:
     def __init__(self, lat_bins=None, lon_bins=None, center=None, 
-            box_width=10, grid_res=0.001):
+            box_width=10, grid_res=0.001, global_grid=False):
         """
         Initialize the heatmap class and the latitude and longitude bins. 
 
@@ -31,6 +31,11 @@ class Heatmap:
         grid_res : float
             The resolution of the grid in degrees. Useful if the
             lat_bins or lon_bins kwargs are not specified.
+        global_grid : bool
+            If lat/lon bins are not specied, setting this kwarg will
+            make a global lat/lon grid for your activities. This 
+            greatly slows down the data processing due to the size of 
+            the arrays, even with sparse matrices. 
 
         Example
         -------
@@ -49,12 +54,15 @@ class Heatmap:
         if (lat_bins is None) or (lon_bins is None):
             # If the user did not specify lat/lon bins assume we live in Bozeman.
             self.center = [-111.0329, 45.660]
-            # self.lon_bins = np.arange(self.center[0]-box_width/2, self.center[0]+box_width/2,
-            #                             grid_res)
-            # self.lat_bins = np.arange(self.center[1]-box_width/2, self.center[1]+box_width/2, 
-            #                             grid_res)
-            self.lon_bins = np.arange(-180, 180, grid_res)
-            self.lat_bins = np.arange(-90, 90, grid_res)
+
+            if global_grid:
+                self.lon_bins = np.arange(-180, 180, grid_res)
+                self.lat_bins = np.arange(-90, 90, grid_res)
+            else:
+                self.lon_bins = np.arange(self.center[0]-box_width/2, self.center[0]+box_width/2,
+                                            grid_res)
+                self.lat_bins = np.arange(self.center[1]-box_width/2, self.center[1]+box_width/2, 
+                                            grid_res)
         else:
             self.lon_bins = lon_bins
             self.lat_bins = lat_bins
@@ -117,18 +125,18 @@ class Heatmap:
                         lons = np.array([i.longitude for i in segment.points])
                         # list of latitude coordinates 
                         lats = np.array([i.latitude for i in segment.points])
-                        # For each point in lats/lons, find the closest grid point from
+                        # For each gpx point find the closest grid point in
                         # self.lon_bins and self.lat_bins
                         idx = self._get_closest_index(lons, lats)
                         for lon_i, lat_i in idx:
-                            # the += notation is not supported yet by scipy.sparse
+                            # Note: the += notation is not supported yet by scipy.sparse
                             self.heatmap[lon_i, lat_i] = self.heatmap[lon_i, lat_i] + 1
-        print(f'self.heatmap size in Mb = {getsizeof(self.heatmap)}')
+
         if save_heatmap: self._save_heatmap()
         return self.heatmap
     
-    def make_map(self, map_zoom_start=11, heatmap_max_zoom=13, heatmap_radius=15, 
-                heatmap_blur=15, heatmap_min_opacity=0.5):
+    def make_map(self, map_zoom_start=11, heatmap_max_zoom=13, heatmap_radius=10, 
+                heatmap_blur=15, heatmap_min_opacity=0.7):
         """ 
         Make a heatmap html file using folium
 
@@ -158,13 +166,13 @@ class Heatmap:
                                 ' the make_heatmap_hist() or '
                                 'load_heatmap() methods.')
 
-        # Convert to an array of non-zero values if self.heatmap 
-        # is in a sparse matrix format.
+        # If the heatmap is in a DataFrame or sparse matrix format, convert 
+        # to an array of (N-Non-Zero-Bins)*3. Columns are lon, lat, heat.
         if isinstance(self.heatmap, scipy.sparse.lil_matrix):
             heat_list = self._convert_sparse_to_lists(self.heatmap)
         elif isinstance(self.heatmap, pd.DataFrame):
             heat_list = self.heatmap.values
-        # Swap the columns to be in the lat, lon, heat format
+        # Swap the columns to be in the lat, lon, heat order
         data = heat_list[:, [1, 0, 2]]
 
         # Make a terrain map.
@@ -240,15 +248,7 @@ class Heatmap:
         assert len(lons) == len(lats), 'Longitude and latitude arrays must be the same shape.'
 
         idx = np.nan*np.ones((len(lons), 2), dtype=int)
-        # Tile the lat/lon bins into len(self.lon_bins) x len(lons) so that when you subtract 
-        # lons, each column will give you the degree distance between lons[i] and self.lon_bins.
-        # This is done to vectorize the entire operation
 
-        # tiled_lons = np.tile(self.lon_bins, len(lons)).reshape(len(self.lon_bins), len(lons))
-        # tiled_lats = np.tile(self.lat_bins, len(lons)).reshape(len(self.lon_bins), len(lons))
-
-        # idx[:, 0] = np.argmin(np.abs(tiled_lons - lons), axis=0)
-        # idx[:, 1] = np.argmin(np.abs(tiled_lats - lats), axis=0)
         for i, (lon_i, lat_i) in enumerate(zip(lons, lats)):
             idx[i, 0] = np.argmin(np.abs(self.lon_bins - lon_i))
             idx[i, 1] = np.argmin(np.abs(self.lat_bins - lat_i))
@@ -257,30 +257,41 @@ class Heatmap:
     def _save_heatmap(self, save_path='./data/heatmap.csv'):
         """
         Saves the heatmap to a csv file with the following three columns:
-        longitude, latitude, heat
+        lon, lat, heat.
 
         Parameters
         ----------
         save_path: str, optional
-            The path where to save the heatmap.csv file.
+            The path where to save the csv file, by default the csv file
+            is saved in './data/heatmap.csv'. 
 
         Returns
         -------
         None
         """
         non_zero_entries = self._convert_sparse_to_lists(self.heatmap)
-
         df = pd.DataFrame(data=non_zero_entries, columns=['lon', 'lat', 'heat'])
         df.to_csv(save_path, index=False)
         return
 
     def _convert_sparse_to_lists(self, x):
         """
-        Converts the sparse matrix x into a three lists that contain only the non-zero 
-        values: a longitude array, a latitude array, and a heat array. 
+        Converts the sparse matrix x into a three lists that contain only the 
+        non-zero values: a longitude array, a latitude array, and a heat array. 
+
+        Parameters
+        ----------
+        x: scipy.sparse.lil_matrix
+            The sparse matrix object to convert.
+
+        Returns
+        -------
+        non_zero_entries: ndarray
+            An array with (N-Non-Zero-Bins)*3 dimensions. 
+            The columns are lon, lat, heat.
         """
         if not isinstance(x, scipy.sparse.lil_matrix):
-            raise ValueError('Heatmap is not in the sparse matrix format.')
+            raise ValueError('Heatmap is not in the LIL sparse matrix format.')
         coo_fmt = x.tocoo()
 
         non_zero_entries = np.nan*np.ones((len(x.nonzero()[0]), 3))
@@ -290,9 +301,7 @@ class Heatmap:
         return non_zero_entries
 
 if __name__ == '__main__':
-    from sys import getsizeof
-
     h = Heatmap()
-    h.make_heatmap_hist()
+    # h.make_heatmap_hist()
     h.load_heatmap()
     h.make_map()
