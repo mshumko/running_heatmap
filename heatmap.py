@@ -12,7 +12,7 @@ import gpxpy.gpx
 
 class Heatmap:
     def __init__(self, lat_bins=None, lon_bins=None, center=None, 
-            box_width=2, grid_res=0.001):
+            box_width=10, grid_res=0.001):
         """
         Initialize the heatmap class and the latitude and longitude bins. 
 
@@ -47,17 +47,14 @@ class Heatmap:
         """
         self.grid_res = grid_res
         if (lat_bins is None) or (lon_bins is None):
-            # If the user did not specify lat/lon bins assume were in Bozeman.
+            # If the user did not specify lat/lon bins assume we live in Bozeman.
             self.center = [-111.0329, 45.660]
-            # self.lon_bins = np.linspace(self.center[0]-box_width/2, self.center[0]+box_width/2,
-            #                             num=self.grid_res)
-            # self.lat_bins = np.linspace(self.center[1]-box_width/2, self.center[1]+box_width/2, 
-            #                             num=self.grid_res)
-
-            self.lon_bins = np.arange(self.center[0]-box_width/2, self.center[0]+box_width/2,
-                                        grid_res)
-            self.lat_bins = np.arange(self.center[1]-box_width/2, self.center[1]+box_width/2, 
-                                        grid_res)
+            # self.lon_bins = np.arange(self.center[0]-box_width/2, self.center[0]+box_width/2,
+            #                             grid_res)
+            # self.lat_bins = np.arange(self.center[1]-box_width/2, self.center[1]+box_width/2, 
+            #                             grid_res)
+            self.lon_bins = np.arange(-180, 180, grid_res)
+            self.lat_bins = np.arange(-90, 90, grid_res)
         else:
             self.lon_bins = lon_bins
             self.lat_bins = lat_bins
@@ -124,10 +121,9 @@ class Heatmap:
                         # self.lon_bins and self.lat_bins
                         idx = self._get_closest_index(lons, lats)
                         for lon_i, lat_i in idx:
-                            print(idx)
                             # the += notation is not supported yet by scipy.sparse
                             self.heatmap[lon_i, lat_i] = self.heatmap[lon_i, lat_i] + 1
-        print(f'self.heatmap size in Mb = {getsizeof(self.heatmap)/1E6}')
+        print(f'self.heatmap size in Mb = {getsizeof(self.heatmap)}')
         if save_heatmap: self._save_heatmap()
         return self.heatmap
     
@@ -238,7 +234,8 @@ class Heatmap:
         Returns
         -------
         idx : a len(lons)x2 ndarray that contanins the index of
-            self.lon_grid abd self.lat_grid points.
+            self.lon_grid and self.lat_grid points that are closest 
+            to the lons and lats arrays.
         """
         assert len(lons) == len(lats), 'Longitude and latitude arrays must be the same shape.'
 
@@ -246,11 +243,15 @@ class Heatmap:
         # Tile the lat/lon bins into len(self.lon_bins) x len(lons) so that when you subtract 
         # lons, each column will give you the degree distance between lons[i] and self.lon_bins.
         # This is done to vectorize the entire operation
-        tiled_lons = np.tile(self.lon_bins, len(lons)).reshape(len(self.lon_bins), len(lons))
-        tiled_lats = np.tile(self.lat_bins, len(lons)).reshape(len(self.lon_bins), len(lons))
-        
-        idx[:, 0] = np.argmin(np.abs(tiled_lons - lons), axis=0)
-        idx[:, 1] = np.argmin(np.abs(tiled_lats - lats), axis=0)
+
+        # tiled_lons = np.tile(self.lon_bins, len(lons)).reshape(len(self.lon_bins), len(lons))
+        # tiled_lats = np.tile(self.lat_bins, len(lons)).reshape(len(self.lon_bins), len(lons))
+
+        # idx[:, 0] = np.argmin(np.abs(tiled_lons - lons), axis=0)
+        # idx[:, 1] = np.argmin(np.abs(tiled_lats - lats), axis=0)
+        for i, (lon_i, lat_i) in enumerate(zip(lons, lats)):
+            idx[i, 0] = np.argmin(np.abs(self.lon_bins - lon_i))
+            idx[i, 1] = np.argmin(np.abs(self.lat_bins - lat_i))
         return idx
 
     def _save_heatmap(self, save_path='./data/heatmap.csv'):
@@ -267,15 +268,10 @@ class Heatmap:
         -------
         None
         """
-
         non_zero_entries = self._convert_sparse_to_lists(self.heatmap)
 
-        with open(save_path, 'w') as f:
-            f.write('lon, lat, heat\n')
-            for row in non_zero_entries:
-                for col_i in row:
-                    f.write(f'{col_i}, ')
-                f.write('\n')
+        df = pd.DataFrame(data=non_zero_entries, columns=['lon', 'lat', 'heat'])
+        df.to_csv(save_path, index=False)
         return
 
     def _convert_sparse_to_lists(self, x):
