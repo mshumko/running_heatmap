@@ -4,13 +4,15 @@ import scipy.sparse # To make a sparse lat/lon matrix
 import pandas as pd
 import pathlib
 
+import progressbar
 import folium
 import folium.plugins
 import gpxpy
 import gpxpy.gpx
 
 class Heatmap:
-    def __init__(self, lat_bins=None, lon_bins=None, center=None, box_width=2, grid_res=0.001):
+    def __init__(self, lat_bins=None, lon_bins=None, center=None, 
+            box_width=2, grid_res=0.001):
         """
         Initialize the heatmap class and the latitude and longitude bins. 
 
@@ -66,7 +68,8 @@ class Heatmap:
             print('Made empty data directory.')
         return
 
-    def make_heatmap_hist(self, gpx_path='./data/', save_heatmap=True, verbose=False, gpx_pattern='*gpx'):
+    def make_heatmap_hist(self, gpx_path='./data/', save_heatmap=True, 
+                        verbose=False, gpx_pattern='*gpx'):
         """
         Makes a 2d lat-lon histogram using the gpx tracks in ./data. The gpx_pattern kwarg allows you to
         change the glob pattern e.g. wildcard (*) to match specific gpx files.
@@ -94,9 +97,11 @@ class Heatmap:
         self._get_gpx_files(gpx_path, gpx_pattern)
 
         # 2d heatmap histrogram.
-        heatmap = np.zeros((len(self.lon_bins)-1, len(self.lat_bins)-1))
+        self.heatmap = scipy.sparse.lil_matrix(
+                    (len(self.lon_bins), len(self.lat_bins)), dtype='uint'
+                    )
 
-        for gpx_file in self.gpx_files:
+        for gpx_file in progressbar.progressbar(self.gpx_files):
             with open(gpx_file) as f:
                 # Check for empty gpx files that are typically due to 
                 # treadmill runs.
@@ -111,17 +116,18 @@ class Heatmap:
                 for track in gpx.tracks:
                     # Loop over all of the track segments (time, lat, lon, alt) points.
                     for segment in track.segments:
-                        # Histogram the lat-lon coordinates.
-                        lons = [i.longitude for i in segment.points]
-                        lats = [i.latitude for i in segment.points]
-                        H, _, _ = np.histogram2d(lons, lats,  
-                                                bins=(
-                                                    self.lon_bins, self.lat_bins
-                                                ))
-                        heatmap += H
-        self.heatmap = pd.DataFrame(data=heatmap, 
-                                    index=self.lat_bins[:-1], 
-                                    columns=self.lon_bins[:-1])
+                        # list of longitude coordinates
+                        lons = np.array([i.longitude for i in segment.points])
+                        # list of latitude coordinates 
+                        lats = np.array([i.latitude for i in segment.points])
+                        # For each point in lats/lons, find the closest grid point from
+                        # self.lon_bins and self.lat_bins
+                        idx = self._get_closest_index(lons, lats)
+                        for lon_i, lat_i in idx:
+                            print(idx)
+                            # the += notation is not supported yet by scipy.sparse
+                            self.heatmap[lon_i, lat_i] = self.heatmap[lon_i, lat_i] + 1
+        print(f'self.heatmap size in Mb = {getsizeof(self.heatmap)/1E6}')
         if save_heatmap: self._save_heatmap()
         return self.heatmap
     
@@ -155,32 +161,28 @@ class Heatmap:
             raise AttributeError('self.heatmap not found. Either run'
                                 ' the make_heatmap_hist() or '
                                 'load_heatmap() methods.')
+
+        # Convert to an array of non-zero values if self.heatmap 
+        # is in a sparse matrix format.
+        if isinstance(self.heatmap, scipy.sparse.lil_matrix):
+            heat_list = self._convert_sparse_to_lists(self.heatmap)
+        elif isinstance(self.heatmap, pd.DataFrame):
+            heat_list = self.heatmap.values
+        # Swap the columns to be in the lat, lon, heat format
+        data = heat_list[:, [1, 0, 2]]
+
         # Make a terrain map.
         self.map = folium.Map(location=self.center[::-1],
                        zoom_start=map_zoom_start,
                        tiles='Stamen Terrain', max_zoom=heatmap_max_zoom)
-
-        # Overlay the heatmap
-        latlat, lonlon = np.meshgrid(
-                                    self.heatmap.index, 
-                                    self.heatmap.columns.astype(float)
-                                    )
-        # idx boolean array necessary to not include lat-lon bins 
-        # with 0 gpx points because you can see all those points
-        # on the map.
-        idx = np.where(self.heatmap.values)
-        data = np.stack([latlat[idx].flatten(), 
-                        lonlon[idx].flatten(), 
-                        self.heatmap.values[idx].flatten()], 
-                        axis=-1)
-        # Add the heatmap with many argument tweaks.
+        # Make the heatmap.
         heatmap = folium.plugins.HeatMap(data,
-                         max_val=self.heatmap.values.max(),
-                          min_opacity=heatmap_min_opacity,
-                          radius=heatmap_radius,
-                          blur=heatmap_blur,
-                          max_zoom=heatmap_max_zoom)
-        self.map.add_child(heatmap)
+                        max_val=data.max(),
+                        min_opacity=heatmap_min_opacity,
+                        radius=heatmap_radius,
+                        blur=heatmap_blur,
+                        max_zoom=heatmap_max_zoom)
+        self.map.add_child(heatmap) # Add the heatmap to the map object.
         self.map.save('./data/heatmap.html')
         return self.map    
 
@@ -197,7 +199,7 @@ class Heatmap:
         -------
         None, creates self.heatmap attribute.
         """
-        self.heatmap = pd.read_csv(heatmap_path, index_col=0)
+        self.heatmap = pd.read_csv(heatmap_path)
         return
 
     def _get_gpx_files(self, gpx_path, gpx_pattern):
@@ -220,11 +222,41 @@ class Heatmap:
         self.gpx_files = list(pathlib.Path(gpx_path).glob(gpx_pattern))
         print(f'{__file__}: Found {len(self.gpx_files)} gpx files')
         return
-    
+
+    def _get_closest_index(self, lons, lats):
+        """
+        Given a longitude and latitude lists, calculate the closet index in 
+        self.lat_bins and self.lon_bins point.
+
+        Parameters
+        ----------
+        lons : ndarray
+            A 1D array of longitude points
+        lats : ndarray
+            A 1D array of latitude points
+
+        Returns
+        -------
+        idx : a len(lons)x2 ndarray that contanins the index of
+            self.lon_grid abd self.lat_grid points.
+        """
+        assert len(lons) == len(lats), 'Longitude and latitude arrays must be the same shape.'
+
+        idx = np.nan*np.ones((len(lons), 2), dtype=int)
+        # Tile the lat/lon bins into len(self.lon_bins) x len(lons) so that when you subtract 
+        # lons, each column will give you the degree distance between lons[i] and self.lon_bins.
+        # This is done to vectorize the entire operation
+        tiled_lons = np.tile(self.lon_bins, len(lons)).reshape(len(self.lon_bins), len(lons))
+        tiled_lats = np.tile(self.lat_bins, len(lons)).reshape(len(self.lon_bins), len(lons))
+        
+        idx[:, 0] = np.argmin(np.abs(tiled_lons - lons), axis=0)
+        idx[:, 1] = np.argmin(np.abs(tiled_lats - lats), axis=0)
+        return idx
+
     def _save_heatmap(self, save_path='./data/heatmap.csv'):
         """
-        Saves the heatmap to a csv file with the latitude bins saved as the 
-        index and longitude bins saved as the columns.
+        Saves the heatmap to a csv file with the following three columns:
+        longitude, latitude, heat
 
         Parameters
         ----------
@@ -235,10 +267,35 @@ class Heatmap:
         -------
         None
         """
-        self.heatmap.to_csv(save_path)
+
+        non_zero_entries = self._convert_sparse_to_lists(self.heatmap)
+
+        with open(save_path, 'w') as f:
+            f.write('lon, lat, heat\n')
+            for row in non_zero_entries:
+                for col_i in row:
+                    f.write(f'{col_i}, ')
+                f.write('\n')
         return
 
+    def _convert_sparse_to_lists(self, x):
+        """
+        Converts the sparse matrix x into a three lists that contain only the non-zero 
+        values: a longitude array, a latitude array, and a heat array. 
+        """
+        if not isinstance(x, scipy.sparse.lil_matrix):
+            raise ValueError('Heatmap is not in the sparse matrix format.')
+        coo_fmt = x.tocoo()
+
+        non_zero_entries = np.nan*np.ones((len(x.nonzero()[0]), 3))
+        non_zero_entries[:, 0] = self.lon_bins[coo_fmt.row]
+        non_zero_entries[:, 1] = self.lat_bins[coo_fmt.col]
+        non_zero_entries[:, 2] = coo_fmt.data
+        return non_zero_entries
+
 if __name__ == '__main__':
+    from sys import getsizeof
+
     h = Heatmap()
     h.make_heatmap_hist()
     h.load_heatmap()
