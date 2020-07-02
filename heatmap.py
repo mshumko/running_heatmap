@@ -136,7 +136,7 @@ class Heatmap:
         return self.heatmap
     
     def make_map(self, map_zoom_start=11, heatmap_max_zoom=13, heatmap_radius=10, 
-                heatmap_blur=15, heatmap_min_opacity=0.7):
+                heatmap_blur=15, heatmap_min_opacity=0.7, saturation_percentile=100):
         """ 
         Make a heatmap html file using folium
 
@@ -156,6 +156,11 @@ class Heatmap:
         heatmap_min_opacity : float, optional
             Passed into folium.plugins.HeatMap and sets the minimum opacity of the
             heatmap.
+        saturation_percentile : float, optional
+            Apply a mask that sets all values above the saturation_percentile 
+            percentile (values 0 to 100) to the saturation_percentile's heat 
+            value. This kwarg is useful to make it hard to identify where you 
+            work, live, or your most popular running routes.
 
         Returns
         -------
@@ -174,6 +179,13 @@ class Heatmap:
             heat_list = self.heatmap.values
         # Swap the columns to be in the lat, lon, heat order
         data = heat_list[:, [1, 0, 2]]
+
+        if saturation_percentile < 100:
+            # Apply the saturation percentile mask
+            data[:, 2] = self._apply_percentile_mask(
+                            data[:, 2], 
+                            saturation_percentile
+                            )
 
         # Make a terrain map.
         self.map = folium.Map(location=self.center[::-1],
@@ -300,8 +312,31 @@ class Heatmap:
         non_zero_entries[:, 2] = coo_fmt.data
         return non_zero_entries
 
+    def _apply_percentile_mask(self, heat, percentile):
+        """ 
+        Applies a percentile saturation mask to the 1D heat array. Heat 
+        values > percentile(heat) are set to percentile(heat)
+
+        Parameters
+        ----------
+        heat : ndarray
+            A 1D array of heat values.
+        percentile : float
+            The saturation percentile between 0 and 100.
+
+        Returns
+        -------
+        heat : ndarray
+            An array of the same shape as heat, except with values greater than
+            percentile(heat) are set to percentile(heat).
+        """
+        saturation_heat = np.percentile(heat, percentile)
+        heat[heat > saturation_heat] = saturation_heat
+        return heat
+
+
 if __name__ == '__main__':
     h = Heatmap()
     # h.make_heatmap_hist()
     h.load_heatmap()
-    h.make_map()
+    h.make_map(saturation_percentile=90)
