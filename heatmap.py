@@ -193,7 +193,7 @@ class Heatmap:
                        tiles='Stamen Terrain', max_zoom=heatmap_max_zoom)
         # Make the heatmap.
         heatmap = folium.plugins.HeatMap(data,
-                        max_val=data.max(),
+                        max_val=data[:,2].max(),
                         min_opacity=heatmap_min_opacity,
                         radius=heatmap_radius,
                         blur=heatmap_blur,
@@ -336,7 +336,7 @@ class Heatmap:
 
 
 if __name__ == '__main__':
-    h = Heatmap()
+    h = Heatmap(global_grid=True)
     # h.make_heatmap_hist()
     h.load_heatmap()
     h.make_map(saturation_percentile=90)
