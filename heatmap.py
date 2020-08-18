@@ -1,9 +1,10 @@
+import pathlib
+import argparse
+
 import numpy as np
 import matplotlib.pyplot as plt
 import scipy.sparse # To make a sparse lat/lon matrix
 import pandas as pd
-import pathlib
-
 import progressbar
 import folium
 import folium.plugins
@@ -333,10 +334,3 @@ class Heatmap:
         saturation_heat = np.percentile(heat, percentile)
         heat[heat > saturation_heat] = saturation_heat
         return heat
-
-
-if __name__ == '__main__':
-    h = Heatmap(global_grid=True)
-    # h.make_heatmap_hist()
-    h.load_heatmap()
-    h.make_map(saturation_percentile=90)
