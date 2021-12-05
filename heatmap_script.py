@@ -4,7 +4,7 @@ import pprint
 import heatmap
 
 # Parse the user arguments.
-parser = argparse.ArgumentParser(description='Outdoor excercise heatmap')
+parser = argparse.ArgumentParser(description='Outdoor exercise heatmap')
 parser.add_argument('--no_hist', action='store_true', 
                 help='Include this flag to not load and histogram the gpx files.')
 parser.add_argument('--globe', action='store_true', 
