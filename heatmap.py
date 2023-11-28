@@ -189,9 +189,16 @@ class Heatmap:
                             )
 
         # Make a terrain map.
-        self.map = folium.Map(location=self.center[::-1],
-                       zoom_start=map_zoom_start,
-                       tiles='Stamen Terrain', max_zoom=heatmap_max_zoom)
+        self.map = folium.Map(
+            location=self.center[::-1],
+            zoom_start=map_zoom_start,
+            tiles='https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+            attr=(
+                '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> '
+                'contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+                ),
+            max_zoom=heatmap_max_zoom
+            )
         # Make the heatmap.
         heatmap = folium.plugins.HeatMap(data,
                         max_val=data[:,2].max(),
