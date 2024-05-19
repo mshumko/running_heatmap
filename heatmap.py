@@ -192,7 +192,13 @@ class Heatmap:
         self.map = folium.Map(
             location=self.center[::-1],
             zoom_start=map_zoom_start,
-            tiles='OpenStreetMap',
+            tiles='https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
+            attr=(
+                'Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                ' contributors, <a href="http://viewfinderpanoramas.org">SRTM</a> | Map style: &copy;'
+                '<a href="https://opentopomap.org">OpenTopoMap</a> (<a href="https://creativecommons.org'
+                '/licenses/by-sa/3.0/">CC-BY-SA</a>)'
+                ),
             max_zoom=heatmap_max_zoom
             )
         # Make the heatmap.
