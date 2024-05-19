@@ -54,7 +54,7 @@ class Heatmap:
         self.grid_res = grid_res
         if (lat_bins is None) or (lon_bins is None):
             # If the user did not specify lat/lon bins assume we live in Bozeman.
-            self.center = [-111.0329, 45.660]
+            self.center = [-77, 39]
 
             if global_grid:
                 self.lon_bins = np.arange(-180, 180, grid_res)
@@ -192,16 +192,11 @@ class Heatmap:
         self.map = folium.Map(
             location=self.center[::-1],
             zoom_start=map_zoom_start,
-            tiles='https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-            attr=(
-                '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> '
-                'contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-                ),
+            tiles='OpenStreetMap',
             max_zoom=heatmap_max_zoom
             )
         # Make the heatmap.
         heatmap = folium.plugins.HeatMap(data,
-                        max_val=data[:,2].max(),
                         min_opacity=heatmap_min_opacity,
                         radius=heatmap_radius,
                         blur=heatmap_blur,
@@ -272,7 +267,7 @@ class Heatmap:
         for i, (lon_i, lat_i) in enumerate(zip(lons, lats)):
             idx[i, 0] = np.argmin(np.abs(self.lon_bins - lon_i))
             idx[i, 1] = np.argmin(np.abs(self.lat_bins - lat_i))
-        return idx
+        return idx.astype(int)
 
     def _save_heatmap(self, save_path='./data/heatmap.csv'):
         """
@@ -341,3 +336,10 @@ class Heatmap:
         saturation_heat = np.percentile(heat, percentile)
         heat[heat > saturation_heat] = saturation_heat
         return heat
+    
+
+if __name__ == '__main__':
+    heat = Heatmap(global_grid=True, grid_res=0.0005)
+    heat.make_heatmap_hist(gpx_path='./data/')
+    heat.load_heatmap()
+    heat.make_map(saturation_percentile=90)
