@@ -1,11 +1,10 @@
 import pathlib
-import argparse
 
 import numpy as np
 import matplotlib.pyplot as plt
 import scipy.sparse # To make a sparse lat/lon matrix
 import pandas as pd
-import progressbar
+import tqdm
 import folium
 import folium.plugins
 import gpxpy
@@ -107,7 +106,7 @@ class Heatmap:
                     (len(self.lon_bins), len(self.lat_bins)), dtype='uint'
                     )
 
-        for gpx_file in progressbar.progressbar(self.gpx_files):
+        for gpx_file in tqdm.tqdm(self.gpx_files):
             with open(gpx_file) as f:
                 # Check for empty gpx files that are typically due to 
                 # treadmill runs.

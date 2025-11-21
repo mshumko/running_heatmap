@@ -1,8 +1,8 @@
-matplotlib==3.9.0
-numpy==1.26.4
-pandas==2.2.2
-scipy==1.4.1
-folium==0.16.0
+matplotlib==3.10.7
+numpy==2.3.5
+pandas==2.3.3
+scipy==1.16.3
+folium==0.20.0
 gpxpy==1.6.2
-progressbar2==4.4.2
-garminconnect==0.2.17
+garminconnect==0.2.34
+tqdm==4.67.1
