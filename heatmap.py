@@ -9,6 +9,60 @@ import folium
 import folium.plugins
 import gpxpy
 import gpxpy.gpx
+import multiprocessing
+
+def _closest_indices_vectorized(points, bins):
+    """
+    Vectorized nearest-index lookup using np.searchsorted.
+    Returns an int array of indices into bins (same shape as points).
+    """
+    if len(points) == 0:
+        return np.array([], dtype=int)
+    idx = np.searchsorted(bins, points)
+    idx_left = np.clip(idx - 1, 0, len(bins) - 1)
+    idx_right = np.clip(idx, 0, len(bins) - 1)
+    left_diff = np.abs(bins[idx_left] - points)
+    right_diff = np.abs(bins[idx_right] - points)
+    use_right = right_diff < left_diff
+    return np.where(use_right, idx_right, idx_left).astype(int)
+
+def _process_gpx_file(gpx_file, lon_bins, lat_bins, verbose=False):
+    """
+    Process one gpx file: parse lons/lats, compute closest grid indices,
+    and return (rows, cols, data) arrays suitable for building a coo_matrix.
+    """
+    try:
+        with open(gpx_file) as f:
+            gpx = gpxpy.parse(f)
+    except Exception as err:
+        if verbose:
+            print(f'Could not parse {gpx_file}: {err}')
+        return (np.array([], dtype=int), np.array([], dtype=int), np.array([], dtype=np.uint32))
+
+    all_lons = []
+    all_lats = []
+    for track in gpx.tracks:
+        for segment in track.segments:
+            if len(segment.points) == 0:
+                continue
+            lons = np.array([p.longitude for p in segment.points])
+            lats = np.array([p.latitude for p in segment.points])
+            all_lons.append(lons)
+            all_lats.append(lats)
+
+    if not all_lons:
+        return (np.array([], dtype=int), np.array([], dtype=int), np.array([], dtype=np.uint32))
+
+    lons = np.concatenate(all_lons)
+    lats = np.concatenate(all_lats)
+
+    lon_idx = _closest_indices_vectorized(lons, lon_bins)
+    lat_idx = _closest_indices_vectorized(lats, lat_bins)
+
+    rows = lon_idx.astype(int)
+    cols = lat_idx.astype(int)
+    data = np.ones(len(rows), dtype=np.uint32)
+    return (rows, cols, data)
 
 class Heatmap:
     def __init__(self, lat_bins=None, lon_bins=None, center=None, 
@@ -73,66 +127,60 @@ class Heatmap:
             print('Made empty data directory.')
         return
 
-    def make_heatmap_hist(self, gpx_path='./data/', save_heatmap=True, 
-                        verbose=False, gpx_pattern='*gpx'):
+    def make_heatmap_hist(self, gpx_path='./data/', save_heatmap=True,
+                          verbose=False, gpx_pattern='*gpx', n_workers=1):
         """
-        Makes a 2d lat-lon histogram using the gpx tracks in ./data. The gpx_pattern kwarg allows you to
-        change the glob pattern e.g. wildcard (*) to match specific gpx files.
-
-        Parameters
-        ----------
-        gpx_path : str, optional
-            Path to gpx tracks, defaults to ./data/.
-        save_heatmap : bool, optional
-            Save the 2d histogram - wrapped in a Pandas DataFrame - to a file ./data/heatmap.csv
-        verbose : bool, optional
-            If true, will print gpx files that could not be processed, typically are treadmill 
-            runs. This is useful for debugging if the heatmap is not generated.
-        gpx_pattern : str, optional
-            A pattern string that gets passed to glob.glob(). By default it will match all
-            .gpx files.
-
-        Returns
-        -------
-        self.heatmap : a Pandas DataFrame object containing the 2d histogram
-            with the latitude bins in the index and longitude bins in the
-            columns
+        Parallelized: n_workers None -> os.cpu_count(), 1 -> sequential.
+        Returns self.heatmap (scipy.sparse.lil_matrix).
         """
         # Get the names of gpx files in the ./data/ folder.
         self._get_gpx_files(gpx_path, gpx_pattern)
 
-        # 2d heatmap histrogram.
-        self.heatmap = scipy.sparse.lil_matrix(
-                    (len(self.lon_bins), len(self.lat_bins)), dtype='uint'
-                    )
+        nlon = len(self.lon_bins)
+        nlat = len(self.lat_bins)
 
-        for gpx_file in tqdm.tqdm(self.gpx_files):
-            with open(gpx_file) as f:
-                # Check for empty gpx files that are typically due to 
-                # treadmill runs.
-                try:
-                    gpx = gpxpy.parse(f)
-                except gpxpy.gpx.GPXXMLSyntaxException as err:
-                    if 'Error parsing XML: no element found:' in str(err):
-                        if verbose: print(f'No element file in {gpx_file}. Empty file?')
-                        continue
+        if n_workers is None:
+            n_workers = multiprocessing.cpu_count()
 
-                # Loop through each track. Each run file should only have one.
-                for track in gpx.tracks:
-                    # Loop over all of the track segments (time, lat, lon, alt) points.
-                    for segment in track.segments:
-                        # list of longitude coordinates
-                        lons = np.array([i.longitude for i in segment.points])
-                        # list of latitude coordinates 
-                        lats = np.array([i.latitude for i in segment.points])
-                        # For each gpx point find the closest grid point in
-                        # self.lon_bins and self.lat_bins
-                        idx = self._get_closest_index(lons, lats)
-                        for lon_i, lat_i in idx:
-                            # Note: the += notation is not supported yet by scipy.sparse
-                            self.heatmap[lon_i, lat_i] = self.heatmap[lon_i, lat_i] + 1
+        # Sequential (single-process) fast path: reuse original loop logic but using helper.
+        if n_workers == 1 or len(self.gpx_files) <= 1:
+            # build rows/cols/data lists and then aggregate
+            rows_list = []
+            cols_list = []
+            data_list = []
+            for gpx_file in tqdm.tqdm(self.gpx_files):
+                r, c, d = _process_gpx_file(str(gpx_file), self.lon_bins, self.lat_bins, verbose=verbose)
+                if r.size:
+                    rows_list.append(r)
+                    cols_list.append(c)
+                    data_list.append(d)
+            if not rows_list:
+                self.heatmap = scipy.sparse.lil_matrix((nlon, nlat), dtype='uint')
+            else:
+                rows = np.concatenate(rows_list)
+                cols = np.concatenate(cols_list)
+                data = np.concatenate(data_list)
+                coo = scipy.sparse.coo_matrix((data, (rows, cols)), shape=(nlon, nlat), dtype='uint')
+                # convert to LIL and sum duplicates by going through CSR
+                self.heatmap = coo.tocsr().tolil()
+        else:
+            # Parallel path
+            args = [(str(g), self.lon_bins, self.lat_bins, verbose) for g in self.gpx_files]
+            with multiprocessing.Pool(processes=n_workers) as pool:
+                results = list(tqdm.tqdm(pool.starmap(_process_gpx_file, args), total=len(args)))
+            # aggregate results
+            rows = np.concatenate([r for r, c, d in results if r.size]) if any(r.size for r, c, d in results) else np.array([], dtype=int)
+            cols = np.concatenate([c for r, c, d in results if c.size]) if any(c.size for r, c, d in results) else np.array([], dtype=int)
+            data = np.concatenate([d for r, c, d in results if d.size]) if any(d.size for r, c, d in results) else np.array([], dtype=np.uint32)
 
-        if save_heatmap: self._save_heatmap()
+            if rows.size == 0:
+                self.heatmap = scipy.sparse.lil_matrix((nlon, nlat), dtype='uint')
+            else:
+                coo = scipy.sparse.coo_matrix((data, (rows, cols)), shape=(nlon, nlat), dtype='uint')
+                self.heatmap = coo.tocsr().tolil()
+
+        if save_heatmap:
+            self._save_heatmap()
         return self.heatmap
     
     def make_map(self, map_zoom_start=11, heatmap_max_zoom=13, heatmap_radius=10, 
