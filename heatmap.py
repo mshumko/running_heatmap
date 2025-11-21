@@ -130,8 +130,30 @@ class Heatmap:
     def make_heatmap_hist(self, gpx_path='./data/', save_heatmap=True,
                           verbose=False, gpx_pattern='*gpx', n_workers=1):
         """
-        Parallelized: n_workers None -> os.cpu_count(), 1 -> sequential.
-        Returns self.heatmap (scipy.sparse.lil_matrix).
+        Makes a 2d lat-lon histogram using the gpx tracks in ./data. The gpx_pattern kwarg allows you to
+        change the glob pattern e.g. wildcard (*) to match specific gpx files.
+        
+        Parameters
+        ----------
+        gpx_path : str, optional
+            Path to gpx tracks, defaults to ./data/.
+        save_heatmap : bool, optional
+            Save the 2d histogram - wrapped in a Pandas DataFrame - to a file ./data/heatmap.csv
+        verbose : bool, optional
+            If true, will print gpx files that could not be processed, typically are treadmill 
+            runs. This is useful for debugging if the heatmap is not generated.
+        gpx_pattern : str, optional
+            A pattern string that gets passed to glob.glob(). By default it will match all
+            .gpx files.
+        n_workers : int, optional
+            The number of parallel worker processes to use. If None, will use
+            all available CPU cores. If 1, will run in serial mode.
+
+        Returns
+        -------
+        self.heatmap : a Pandas DataFrame object containing the 2d histogram
+            with the latitude bins in the index and longitude bins in the
+            columns
         """
         # Get the names of gpx files in the ./data/ folder.
         self._get_gpx_files(gpx_path, gpx_pattern)
@@ -145,6 +167,7 @@ class Heatmap:
         # Sequential (single-process) fast path: reuse original loop logic but using helper.
         if n_workers == 1 or len(self.gpx_files) <= 1:
             # build rows/cols/data lists and then aggregate
+        
             rows_list = []
             cols_list = []
             data_list = []
