@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "running-heatmap"
+version = "0.2.0"
+description = "Generate heatmaps from GPX files."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+  { name = "Mykhaylo Shumko", email = "msshumko@gmail.com" }
+]
+ndependencies = [
+  "matplotlib=>3.10.7",
+  "numpy=>2.3.5",
+  "pandas=>2.3.3",
+  "scipy=>1.16.3",
+  "folium=>0.20.0",
+  "gpxpy=>1.6.2",
+  "garminconnect=>0.2.34",
+  "tqdm=>4.67.1",
+]
+
+[project.urls]
+Homepage = "https://github.com/mshumko/running_heatmap"
+
+[tool.setuptools.packages.find]
+where = ["."]
+exclude = ["tests*"]

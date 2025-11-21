@@ -4,3 +4,4 @@ settings.json
 garmin-connect-export/
 env/
 *pyc
+*.egg-info/
